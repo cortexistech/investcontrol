@@ -1,4 +1,4 @@
-import type { IndexType, InvestmentType, Liquidity } from "@/generated/prisma/client";
+import type { BankAccountType, BankTransactionType, IndexType, InvestmentType, Liquidity } from "@/generated/prisma/client";
 
 export const INVESTMENT_TYPE_LABELS: Record<InvestmentType, string> = {
   CDB: "CDB",
@@ -41,6 +41,20 @@ export const DEFAULT_RATE_SUFFIX: Record<IndexType, string> = {
   SELIC: "% Selic",
   IPCA: "% a.a. (+IPCA)",
   PREFIXADO: "% a.a.",
+};
+
+export const BANK_ACCOUNT_TYPE_LABELS: Record<BankAccountType, string> = {
+  CORRENTE: "Conta corrente",
+  POUPANCA: "Poupança",
+  CARTAO_CREDITO: "Cartão de crédito",
+  CARTEIRA: "Carteira / dinheiro",
+  OUTRO: "Outra",
+};
+
+export const BANK_TRANSACTION_TYPE_LABELS: Record<BankTransactionType, string> = {
+  CREDITO: "Entrada",
+  DEBITO: "Saída",
+  TRANSFERENCIA: "Transferência",
 };
 
 export function formatRate(indexType: IndexType, rate: number): string {

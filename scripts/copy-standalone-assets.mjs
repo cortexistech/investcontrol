@@ -86,12 +86,22 @@ for (const name of ["better-sqlite3", "bindings", "file-uri-to-path"]) {
 }
 
 const betterSqlite3CopyDir = path.join(vendorNativeModulesDir, "better-sqlite3");
-const nodeFile = readdirSync(betterSqlite3CopyDir, { recursive: true }).find((f) => f.endsWith(".node"));
+// node-gyp always writes the binary it just built to build/Release — that's the one electron-rebuild
+// actually compiled for the arch/ABI requested in this run. Prefer it over scanning bin/**, which is
+// prebuild-install's cache of every arch ever rebuilt on this machine (e.g. a stale arm64 prebuild
+// left over from a previous cross-build): picking "the first .node file found" there is a coin flip
+// on which architecture ships, not necessarily the one just requested.
+const releaseBinaryRelPath = path.join("build", "Release", "better_sqlite3.node");
+const nodeFile = existsSync(path.join(betterSqlite3CopyDir, releaseBinaryRelPath))
+  ? releaseBinaryRelPath
+  : readdirSync(betterSqlite3CopyDir, { recursive: true }).find((f) => f.endsWith(".node"));
 if (!nodeFile) {
   console.error(`Nenhum binário .node encontrado em ${betterSqlite3CopyDir} — o electron-rebuild rodou?`);
   process.exit(1);
 }
 const canonicalDir = path.join(betterSqlite3CopyDir, "build", "Release");
 mkdirSync(canonicalDir, { recursive: true });
-cpSync(path.join(betterSqlite3CopyDir, nodeFile), path.join(canonicalDir, "better_sqlite3.node"));
+const sourcePath = path.join(betterSqlite3CopyDir, nodeFile);
+const targetPath = path.join(canonicalDir, "better_sqlite3.node");
+if (sourcePath !== targetPath) cpSync(sourcePath, targetPath);
 console.log(`Binário nativo (${nodeFile}) também disponível em build/Release/better_sqlite3.node para o "bindings"`);

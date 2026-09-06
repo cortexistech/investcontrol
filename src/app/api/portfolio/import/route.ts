@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getLicenseOrNull, licenseErrorResponse } from "@/lib/license";
 import { getAuthenticatedUserOrNull } from "@/lib/auth";
+import { importPortfolioEntries } from "@/lib/portfolio-repo";
 import * as XLSX from "xlsx";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ function number(value: unknown) {
 }
 
 function rowsForSheet(rows: unknown[][], year: number) {
-  const imported: Array<{ year: number; month: number; institution: string; category: string; currency: "BRL"; value: number; contributions: number; withdrawals: number }> = [];
+  const imported: Array<{ year: number; month: number; institution: string; category: string; currency: "BRL"; value: number }> = [];
   let boundary = 0;
 
   function flush(institution: string, start: number, end: number) {
@@ -28,7 +28,7 @@ function rowsForSheet(rows: unknown[][], year: number) {
       if (!category || ignoredLabels.has(normalized) || normalized.startsWith("TOTAL ")) continue;
       valueColumns.forEach((column, month) => {
         if (typeof row[column] === "number" && Number.isFinite(row[column])) {
-          imported.push({ year, month, institution, category, currency: "BRL", value: number(row[column]), contributions: 0, withdrawals: 0 });
+          imported.push({ year, month, institution, category, currency: "BRL", value: number(row[column]) });
         }
       });
     }
@@ -59,21 +59,6 @@ export async function POST(request: Request) {
     return rowsForSheet(XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true }) as unknown[][], year);
   });
 
-  await prisma.$transaction(
-    imported.map((entry) =>
-      prisma.portfolioEntry.upsert({
-        where: {
-          year_month_institution_category: {
-            year: entry.year,
-            month: entry.month,
-            institution: entry.institution,
-            category: entry.category,
-          },
-        },
-        update: { value: entry.value },
-        create: entry,
-      })
-    )
-  );
+  await importPortfolioEntries(imported);
   return NextResponse.json({ imported: imported.length, years: workbook.SheetNames.filter((name) => /^\d{4}$/.test(name)) });
 }

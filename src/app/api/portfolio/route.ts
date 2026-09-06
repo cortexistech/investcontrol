@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { getLicenseOrNull, licenseErrorResponse } from "@/lib/license";
 import { getAuthenticatedUserOrNull } from "@/lib/auth";
+import { deletePortfolioEntries, listPortfolioEntries, renamePortfolioEntry, upsertPortfolioEntry } from "@/lib/portfolio-repo";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   if (!Number.isInteger(year) || year < 2000 || year > 2200) {
     return NextResponse.json({ error: "Ano inválido." }, { status: 400 });
   }
-  const entries = await prisma.portfolioEntry.findMany({ where: { year }, orderBy: [{ institution: "asc" }, { category: "asc" }, { month: "asc" }] });
+  const entries = await listPortfolioEntries(year);
   return NextResponse.json(entries);
 }
 
@@ -32,18 +32,12 @@ export async function PUT(request: Request) {
   if (!Number.isInteger(year) || year < 2000 || year > 2200 || !Number.isInteger(month) || month < 0 || month > 12 || !institution || !category || !Number.isFinite(value) || value < 0) {
     return NextResponse.json({ error: "Informe ano, mês, instituição, categoria e um valor válido." }, { status: 400 });
   }
-
   if (!Number.isFinite(movementAmount) || movementAmount < 0) return NextResponse.json({ error: "Movimentação inválida." }, { status: 400 });
-  const existing = await prisma.portfolioEntry.findUnique({ where: { year_month_institution_category: { year, month, institution, category } } });
-  if (existing && existing.currency !== currency) {
+
+  const { entry, currencyMismatch } = await upsertPortfolioEntry({ year, month, institution, category, currency, value, movementType, movementAmount });
+  if (currencyMismatch) {
     return NextResponse.json({ error: "A moeda de um lançamento existente não pode ser alterada neste campo. Use Alterar lançamento." }, { status: 409 });
   }
-  const movementData = movementType === "APORTE" ? { contributions: { increment: movementAmount } } : movementType === "RETIRADA" ? { withdrawals: { increment: movementAmount } } : {};
-  const entry = await prisma.portfolioEntry.upsert({
-    where: { year_month_institution_category: { year, month, institution, category } },
-    update: { value, ...movementData },
-    create: { year, month, institution, category, currency, value, contributions: movementType === "APORTE" ? movementAmount : 0, withdrawals: movementType === "RETIRADA" ? movementAmount : 0 },
-  });
   return NextResponse.json(entry);
 }
 
@@ -52,7 +46,7 @@ export async function DELETE(request: Request) {
   if (!(await getAuthenticatedUserOrNull())) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   const body = await request.json();
   const month = body.month === undefined ? undefined : Number(body.month);
-  await prisma.portfolioEntry.deleteMany({ where: { year: Number(body.year), month, institution: String(body.institution ?? ""), category: String(body.category ?? "") } });
+  await deletePortfolioEntries({ year: Number(body.year), month, institution: String(body.institution ?? ""), category: String(body.category ?? "") });
   return NextResponse.json({ ok: true });
 }
 
@@ -70,7 +64,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Informe os dados do lançamento." }, { status: 400 });
   }
   try {
-    const result = await prisma.portfolioEntry.updateMany({ where: { year, institution: oldInstitution, category: oldCategory }, data: { institution, category, currency } });
+    const result = await renamePortfolioEntry({ year, oldInstitution, oldCategory, institution, category, currency });
     if (result.count === 0) return NextResponse.json({ error: "Lançamento não encontrado para este ano." }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch {

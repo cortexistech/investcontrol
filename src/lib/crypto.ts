@@ -48,3 +48,35 @@ export function decrypt(payload: string): string {
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
   return plaintext.toString("utf8");
 }
+
+/**
+ * Like decrypt(), but tolerates rows written before a field became encrypted (or restored from a
+ * pre-encryption backup): if the payload isn't valid AES-256-GCM ciphertext for the current key,
+ * it's returned unchanged with `needsRewrite: true` so the caller can persist the encrypted
+ * version back — a one-time, self-healing migration applied the first time each row is read.
+ * GCM's auth tag makes a false positive (plaintext that looks like valid ciphertext) astronomically
+ * unlikely, so this fallback is safe even though it can't cryptographically prove the row is legacy.
+ */
+export function decryptLegacy(payload: string): { value: string; needsRewrite: boolean } {
+  try {
+    return { value: decrypt(payload), needsRewrite: false };
+  } catch {
+    return { value: payload, needsRewrite: true };
+  }
+}
+
+/**
+ * Decrypts a field that decodes to a number (a stored amount/limit/balance). `rewrite` is the
+ * freshly-encrypted ciphertext to persist when the row was still on the legacy plaintext format —
+ * `null` when it was already encrypted, so callers can skip the write-back entirely.
+ */
+export function decryptMoney(payload: string): { amount: number; rewrite: string | null } {
+  const { value, needsRewrite } = decryptLegacy(payload);
+  return { amount: Number(value), rewrite: needsRewrite ? encrypt(value) : null };
+}
+
+/** Same idea as decryptMoney(), for a plain text field (name, description, notes, tags...). */
+export function decryptText(payload: string): { text: string; rewrite: string | null } {
+  const { value, needsRewrite } = decryptLegacy(payload);
+  return { text: value, rewrite: needsRewrite ? encrypt(value) : null };
+}

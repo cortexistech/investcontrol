@@ -114,7 +114,15 @@ function baselineLegacyMigrations(db, migrationFolders) {
       (folder.endsWith("_add_authentication") &&
         hasTable("User") &&
         hasTable("AuthSession") &&
-        hasTable("PasswordResetToken"));
+        hasTable("PasswordResetToken")) ||
+      (folder.endsWith("_add_bank_accounts") &&
+        hasTable("BankAccount") &&
+        hasTable("BankTransaction") &&
+        hasTable("ExpenseCategory")) ||
+      (folder.endsWith("_add_finance_planning") &&
+        hasTable("Recurrence") &&
+        hasTable("Budget") &&
+        hasTable("Goal"));
 
     if (applied) {
       db.prepare(

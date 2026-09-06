@@ -71,6 +71,11 @@ model Settings {
   updatedAt DateTime @updatedAt
 }
 
+// value, contributions and withdrawals hold AES-256-GCM ciphertext (see src/lib/crypto.ts and
+// src/lib/portfolio-repo.ts) — never read or write them directly through `prisma.portfolioEntry`.
+// institution and category stay plaintext: they're the compound natural key this model is
+// upserted/renamed/deleted by (see year_month_institution_category below), which only works with
+// a value the database can compare directly — ciphertext, being non-deterministic, cannot.
 model PortfolioEntry {
   id          String   @id @default(cuid())
   year        Int
@@ -78,9 +83,9 @@ model PortfolioEntry {
   institution String
   category    String
   currency    Currency @default(BRL)
-  value       Float    @default(0)
-  contributions Float  @default(0)
-  withdrawals   Float  @default(0)
+  value       String   // encrypted; decrypts to a Float
+  contributions String // encrypted; decrypts to a Float
+  withdrawals   String // encrypted; decrypts to a Float
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -139,4 +144,146 @@ model PasswordResetToken {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+}
+
+enum BankAccountType {
+  CORRENTE
+  POUPANCA
+  CARTAO_CREDITO
+  CARTEIRA
+  OUTRO
+}
+
+enum BankTransactionType {
+  CREDITO
+  DEBITO
+  TRANSFERENCIA
+}
+
+enum ExpenseCategoryKind {
+  ENTRADA
+  SAIDA
+  AMBOS
+}
+
+// name, institution, initialBalance and creditLimit hold AES-256-GCM ciphertext (see src/lib/crypto.ts
+// and src/lib/bank-repo.ts) — never read or write them directly through `prisma.bankAccount`.
+model BankAccount {
+  id             String          @id @default(cuid())
+  name           String // encrypted
+  institution    String // encrypted
+  type           BankAccountType @default(CORRENTE)
+  currency       Currency        @default(BRL)
+  initialBalance String // encrypted; decrypts to a Float
+  creditLimit    String? // encrypted; decrypts to a Float
+  closingDay     Int?
+  dueDay         Int?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  transactions   BankTransaction[] @relation("AccountTransactions")
+  incomingTransfers BankTransaction[] @relation("TransferDestination")
+  recurrences    Recurrence[]
+}
+
+model ExpenseCategory {
+  id           String              @id @default(cuid())
+  name         String
+  kind         ExpenseCategoryKind @default(SAIDA)
+  color        String              @default("#0f766e")
+  sortOrder    Int                 @default(0)
+  system       Boolean             @default(false)
+  parentId     String?
+  parent       ExpenseCategory?    @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children     ExpenseCategory[]   @relation("CategoryTree")
+  transactions BankTransaction[]
+  recurrences  Recurrence[]
+  budgets      Budget[]
+
+  @@unique([name])
+}
+
+// amount, description, notes and tags hold AES-256-GCM ciphertext (see src/lib/crypto.ts and
+// src/lib/bank-repo.ts) — never read or write them directly through `prisma.bankTransaction`.
+model BankTransaction {
+  id                   String              @id @default(cuid())
+  accountId            String
+  categoryId           String?
+  type                 BankTransactionType
+  amount               String // encrypted; decrypts to a Float
+  date                 DateTime
+  description          String // encrypted
+  notes                String? // encrypted
+  tags                 String? // encrypted; decrypts to a comma-separated tag list
+  isIncoming           Boolean             @default(false)
+  transferGroupId      String?
+  counterpartAccountId String?
+  installmentGroupId   String?
+  installmentIndex     Int?
+  installmentCount     Int?
+  recurrenceId         String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  account              BankAccount         @relation("AccountTransactions", fields: [accountId], references: [id], onDelete: Cascade)
+  counterpartAccount   BankAccount?        @relation("TransferDestination", fields: [counterpartAccountId], references: [id], onDelete: SetNull)
+  category             ExpenseCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  recurrence           Recurrence?         @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+
+  @@index([accountId, date])
+  @@index([date])
+  @@index([transferGroupId])
+  @@index([installmentGroupId])
+}
+
+// amount, description and tags hold AES-256-GCM ciphertext (see src/lib/crypto.ts and
+// src/lib/finance.ts) — never read or write them directly through `prisma.recurrence`.
+model Recurrence {
+  id          String              @id @default(cuid())
+  accountId   String
+  categoryId  String?
+  type        BankTransactionType
+  amount      String // encrypted; decrypts to a Float
+  description String // encrypted
+  dayOfMonth  Int
+  startDate   DateTime
+  endDate     DateTime?
+  active      Boolean             @default(true)
+  tags        String? // encrypted; decrypts to a comma-separated tag list
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  account     BankAccount         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category    ExpenseCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  transactions BankTransaction[]
+}
+
+// amount holds AES-256-GCM ciphertext (see src/lib/crypto.ts and src/lib/finance.ts) — never read
+// or write it directly through `prisma.budget`.
+model Budget {
+  id         String          @id @default(cuid())
+  categoryId String
+  year       Int
+  month      Int
+  amount     String // encrypted; decrypts to a Float
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, year, month])
+}
+
+enum GoalKind {
+  RESERVA
+  OBJETIVO
+}
+
+// name, targetAmount and currentAmount hold AES-256-GCM ciphertext (see src/lib/crypto.ts and
+// src/lib/finance.ts) — never read or write them directly through `prisma.goal`.
+model Goal {
+  id            String   @id @default(cuid())
+  name          String // encrypted
+  kind          GoalKind @default(OBJETIVO)
+  targetAmount  String // encrypted; decrypts to a Float
+  currentAmount String // encrypted; decrypts to a Float
+  deadline      DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

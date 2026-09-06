@@ -47,6 +47,7 @@ next-env.d.ts
 /skills-lock.json
 /dev.db
 /dev.db-journal
+/dev.db.backup-*
 /prisma/dev.db
 
 # licensing: private signing key and per-install activation state — never ship or commit these
@@ -55,3 +56,6 @@ next-env.d.ts
 
 # electron-builder output (installers)
 /dist
+
+# scratch HTML scripts/render-manual-pdf.mjs writes on its way to a PDF — regenerated each run
+/docs/.manual-print.html

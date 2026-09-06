@@ -47,6 +47,9 @@ test("aplica todas as migrations e permanece idempotente", () => {
       assert.ok(tables.includes("Investment"));
       assert.ok(tables.includes("PortfolioEntry"));
       assert.ok(tables.includes("InvestmentMovement"));
+      assert.ok(tables.includes("BankAccount"));
+      assert.ok(tables.includes("BankTransaction"));
+      assert.ok(tables.includes("ExpenseCategory"));
       assert.equal(migrationCount, expectedCount);
     } finally {
       db.close();

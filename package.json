@@ -85,7 +85,8 @@
     "mac": {
       "target": "dmg",
       "icon": "build/icon.png",
-      "category": "public.app-category.finance"
+      "category": "public.app-category.finance",
+      "identity": null
     },
     "win": {
       "target": "nsis",

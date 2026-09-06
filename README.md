@@ -2,22 +2,53 @@
 
 ![Investe Valor](./public/brand/investe-valor-logo.png)
 
-Aplicação web para controle financeiro e acompanhamento de investimentos: **CDB, LCI, LCA, LC, Tesouro Direto (Selic, Prefixado, IPCA+) e Poupança**.
+Aplicação web de controle financeiro pessoal completo: contas, cartões, orçamento, metas e fluxo de caixa no dia a dia, além do acompanhamento de investimentos de renda fixa — **CDB, LCI, LCA, LC, Tesouro Direto (Selic, Prefixado, IPCA+) e Poupança**.
 
-📘 [Manual do usuário](./docs/MANUAL-DO-USUARIO.md) — como usar o painel, cadastrar investimentos e entender os cálculos de rendimento, IR e IOF.
+📘 [Manual do usuário](./docs/MANUAL-DO-USUARIO.md) — como usar o painel, lançar movimentações, planejar o orçamento, cadastrar investimentos e entender os cálculos de rendimento, IR e IOF.
+
+---
+
+![Cortexis](./public/brand/cortexis-logo-small.png) Desenvolvido por **[Cortexis](https://cortexists.com)** — [cortexists.com](https://cortexists.com)
+
+---
 
 ## Funcionalidades
 
-- **Painel** com total investido, valor líquido estimado, rentabilidade e distribuição da carteira por tipo de investimento (gráfico de pizza).
+### Dia a dia (contas, cartões e lançamentos)
+
+- **Painel financeiro** com saldo consolidado, faturas do mês, saldo livre até o fim do mês, lançamento rápido, próximos vencimentos (7 dias) e barras de progresso dos tetos de categoria.
+- **Lançamento rápido** de receitas, despesas e transferências entre contas em poucos cliques (modal compacto no painel).
+- **Contas ilimitadas**: corrente, poupança, carteira e cartão de crédito, com saldo consolidado e extrato por conta ou geral.
+- **Cartões de crédito**: limite comprometido vs. disponível, fatura aberta e dia de vencimento.
+- **Compras parceladas**, divididas automaticamente ao longo dos meses seguintes.
+- **Transferências** entre contas, refletidas nos dois lados do extrato.
+- **Categorização em 2 níveis** (categoria principal + subcategoria) e **tags** livres para agrupar gastos (`#viagem-ferias`, `#trabalho`, ...).
+
+### Planejamento e fluxo de caixa
+
+- **Orçamento por teto** mensal por categoria, com progresso em tempo real.
+- **Recorrências** (contas fixas e receitas recorrentes) com lista de próximos vencimentos.
+- **Projeção de fluxo de caixa** para 30, 60 e 90 dias, com base nas recorrências ativas.
+- **Simulador de decisão**: impacto anual de uma nova despesa recorrente sobre a renda.
+- **Metas e reserva de emergência**: caixinhas para objetivos (viagem, carro, IPVA...) e acompanhamento de quantos meses de custo de vida a reserva cobre.
+- **Taxa de poupança automática**: percentual da renda líquida retido no mês.
+
+### Patrimônio e investimentos
+
 - **Cadastro de investimentos** (CRUD completo): instituição, indexador, taxa, valor aplicado, datas de aplicação/vencimento, liquidez e cobertura do FGC.
 - **Cálculo automático** do valor líquido estimado de cada investimento, considerando:
   - Indexadores CDI, Selic, IPCA+ e prefixado, com capitalização em dias úteis (base 252).
   - Tabela regressiva de **Imposto de Renda** (22,5% a 15%, conforme prazo).
   - **IOF regressivo** para resgates com menos de 30 dias.
   - **Isenção de IR** para LCI, LCA e Poupança.
-- **Vencimentos próximos** (90 dias) em destaque no painel.
-- **Configurações** para atualizar as taxas atuais de CDI, Selic e IPCA usadas nas projeções.
-- **Criptografia em repouso** dos dados sensíveis de cada investimento (nome, instituição, taxa, valor investido e observações) com AES-256-GCM antes de gravar no banco.
+- **Patrimônio consolidado multi-moeda** (BRL, USD, EUR) e multi-instituição, com lançamento mensal, aportes/retiradas e importação de planilha `.xlsx`.
+- **Dashboard do patrimônio** com evolução mensal, composição por moeda e concentração por instituição.
+
+### Plataforma
+
+- **Configurações** para atualizar as taxas atuais de CDI, Selic, IPCA e cotações de USD/EUR usadas nas projeções.
+- **Criptografia em repouso** com AES-256-GCM antes de gravar no banco: nos investimentos (nome, instituição, taxa, valor, observações), no módulo financeiro (nome/instituição/limite das contas, valor/descrição/observações/tags das movimentações, e valores de recorrências, orçamentos e metas) e nos valores do Patrimônio (saldo, aportes e retiradas mensais). Nomes de categorias e a instituição/aplicação de cada linha do Patrimônio ficam em texto plano — são identificadores usados para localizar e atualizar o lançamento certo, não segredos numéricos. Ver [Estrutura](#estrutura).
+- **Login com autenticação própria** (e-mail/senha, recuperação por e-mail, 2FA via TOTP).
 - **Licenciamento por chave** — o app só libera o uso depois de ativado com uma chave de licença assinada digitalmente (Ed25519), validada localmente sem precisar de internet.
 
 ## Stack
@@ -111,16 +142,26 @@ Resumo do fluxo:
 ## Estrutura
 
 ```
-prisma/schema.prisma         modelos: Investment, Settings
-src/lib/crypto.ts            criptografia AES-256-GCM (ENCRYPTION_KEY)
-src/lib/investments-repo.ts  único ponto de acesso a Investment; cifra/decifra na borda
-src/lib/investment-calc.ts   motor de cálculo (rendimento, IR, IOF)
-src/lib/license.ts           validação de chave de licença (Ed25519)
-src/app/                     páginas: painel (/), investimentos, configurações, ativação
-src/app/api/                 rotas REST: /api/investments, /api/settings, /api/license/activate
-src/components/              componentes de UI
+prisma/schema.prisma          modelos: Investment, PortfolioEntry, BankAccount, BankTransaction,
+                               Recurrence, Budget, Goal, ExpenseCategory, User, Settings...
+src/lib/crypto.ts             criptografia AES-256-GCM (ENCRYPTION_KEY), compartilhada por todos os módulos
+src/lib/investments-repo.ts   único ponto de acesso a Investment; cifra/decifra na borda
+src/lib/investment-calc.ts    motor de cálculo de investimentos (rendimento, IR, IOF)
+src/lib/bank-repo.ts          único ponto de acesso a BankAccount/BankTransaction; cifra/decifra na borda
+src/lib/finance.ts            monta o snapshot do painel financeiro; único ponto de acesso a
+                               Recurrence/Budget/Goal, também cifrando/decifrando na borda
+src/lib/portfolio-repo.ts     único ponto de acesso a PortfolioEntry; cifra/decifra na borda
+src/lib/auth.ts               sessões, login, 2FA (TOTP) e recuperação de senha
+src/lib/license.ts            validação de chave de licença (Ed25519)
+src/app/                      páginas: painel (/), conta, planejamento, investimentos, patrimônio,
+                               dashboard, configurações, login/cadastro, ativação
+src/app/api/                  rotas REST: transactions, accounts, budgets, recurrences, goals,
+                               categories, investments, portfolio, settings, auth, license
+src/components/               componentes de UI
 scripts/setup.mjs             instalação em um comando (npm run setup)
 electron/main.js               processo principal do app desktop (Electron)
 electron/migrate.js            cria o banco na primeira execução do app desktop
 .github/workflows/build-desktop.yml  builda os instaladores .exe/.dmg no CI
 ```
+
+> Linhas gravadas antes de um campo passar a ser cifrado (ou restauradas de um backup antigo) se auto-migram: na primeira leitura, o valor em texto plano é decifrado com um fallback tolerante e regravado já cifrado — não é preciso rodar nenhum script manual.

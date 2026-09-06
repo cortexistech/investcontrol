@@ -9,6 +9,8 @@ import { AccountMenu } from "@/components/AccountMenu";
 
 const LINKS = [
   { href: "/", label: "Painel" },
+  { href: "/conta", label: "Conta" },
+  { href: "/planejamento", label: "Planejamento" },
   { href: "/investimentos", label: "Investimentos" },
   { href: "/patrimonio", label: "Patrimônio" },
   { href: "/dashboard", label: "Dashboard" },
